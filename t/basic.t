@@ -2,7 +2,11 @@
 
 use strict;
 use warnings;
-use Test::More tests => 8;
+use Test::More tests => 9;
+
+use Carp;
+
+$SIG{__WARN__} = \&Carp;
 
 BEGIN {
     use_ok( 'File::Next' );
@@ -16,6 +20,10 @@ JUST_A_FILE: {
     isa_ok( $iter, 'CODE' );
 
     my @actual = slurp( $iter );
+    my @expected = qw(
+        t/pod.t
+    );
+    is_deeply( [sort @expected], [sort @actual], 'JUST_A_FILE' );
 }
 
 NO_PARMS: {
@@ -45,7 +53,7 @@ NO_PARMS: {
     );
 
     @actual = grep { !/\.svn/ } @actual; # If I'm building this in my Subversion dir
-    is_deeply( [sort @expected], [sort @actual] );
+    is_deeply( [sort @expected], [sort @actual], 'NO_PARMS' );
 }
 
 MULTIPLE_STARTS: {
@@ -64,7 +72,7 @@ MULTIPLE_STARTS: {
     );
 
     @actual = grep { !/\.svn/ } @actual; # If I'm building this in my Subversion dir
-    is_deeply( [sort @expected], [sort @actual] );
+    is_deeply( [sort @expected], [sort @actual], 'MULTIPLE_STARTS' );
 }
 
 NO_DESCEND: {
@@ -87,7 +95,9 @@ NO_DESCEND: {
         t/swamp/perl.pod
     );
 
-    is_deeply( [sort @expected], [sort @actual] );
+    is_deeply( [sort @expected], [sort @actual], 'NO_DESCEND' );
+    use Data::Dumper;
+    print Dumper( \@expected, \@actual );
 }
 
 
