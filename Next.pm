@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.20
+Version 0.22
 
 =cut
 
-our $VERSION = '0.20';
+our $VERSION = '0.22';
 
 =head1 SYNOPSIS
 
@@ -171,7 +171,7 @@ sub files {
             elsif (-f $fullpath) {
                 local $_ = $file;
                 local $File::Next::dir = $dir;
-                local $File::Next::file = $fullpath;
+                local $File::Next::name = $fullpath;
                 if ( $parms->{file_filter}->() ) {
                     if (wantarray) {
                         return ($dir,$file);
