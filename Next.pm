@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.24
+Version 0.26
 
 =cut
 
-our $VERSION = '0.24';
+our $VERSION = '0.26';
 
 =head1 SYNOPSIS
 
@@ -150,7 +150,8 @@ sub files {
     }
 
     my @queue;
-    for my $start ( @_ ) {
+    for ( @_ ) {
+        my $start = _reslash( $_ );
         if (-d $start) {
             push @queue, [$start,undef];
         }
@@ -163,7 +164,12 @@ sub files {
         while (@queue) {
             my ($dir,$file) = @{shift @queue};
 
-            my $fullpath = _glomp( $dir, $file );
+            my $fullpath =
+                defined $dir
+                    ? defined $file
+                        ? File::Spec->catfile( $dir, $file )
+                        : $dir
+                    : $file;
 
             if (-d $fullpath) {
                 push( @queue, _candidate_files( $parms, $fullpath ) );
@@ -185,6 +191,16 @@ sub files {
 
         return;
     }; # iterator
+}
+
+sub _reslash {
+    my $path = shift;
+
+    my @parts = split( /\//, $path );
+
+    return $path if @parts < 2;
+
+    return File::Spec->catfile( @parts );
 }
 
 =for private _candidate_files( $parms, $dir )
@@ -209,9 +225,12 @@ sub _candidate_files {
     }
 
     my @newfiles;
+    my $up = File::Spec->updir;
+    my $cur = File::Spec->curdir;
     while ( my $file = readdir $dh ) {
-        next if $file =~ /^\.{1,2}$/;
-        local $File::Next::dir = File::Spec->catfile( $dir, $file );
+        next if ($file eq $up) || ($file eq $cur);
+
+        local $File::Next::dir = File::Spec->catdir( $dir, $file );
         if ( -d $File::Next::dir ) {
             local $_ = $file;
             next unless $parms->{descend_filter}->();
@@ -221,29 +240,6 @@ sub _candidate_files {
 
     return @newfiles;
 }
-
-=for private _glomp( $dir, $file )
-
-Sticks together I$<dir> and I<$file> safely.
-
-=cut
-
-sub _glomp {
-    my ($dir,$file) = @_;
-
-    if ( defined $dir ) {
-        if ( defined $file ) {
-            return File::Spec->catfile( $dir, $file );
-        }
-        else {
-            return $dir;
-        }
-    }
-    else {
-        return $file;
-    }
-}
-
 
 =head1 AUTHOR
 
