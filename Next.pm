@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.22
+Version 0.24
 
 =cut
 
-our $VERSION = '0.22';
+our $VERSION = '0.24';
 
 =head1 SYNOPSIS
 
@@ -282,6 +282,10 @@ L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=File-Next>
 =item * Search CPAN
 
 L<http://search.cpan.org/dist/File-Next>
+
+=item * Subversion repository
+
+L<https://file-next.googlecode.com/svn/trunk>
 
 =back
 

@@ -2,7 +2,11 @@
 
 use strict;
 use warnings;
-use Test::More tests => 9;
+use Test::More tests => 11;
+
+use lib 't';
+
+use Util;
 
 use Carp;
 
@@ -23,7 +27,7 @@ JUST_A_FILE: {
     my @expected = qw(
         t/pod.t
     );
-    is_deeply( [sort @expected], [sort @actual], 'JUST_A_FILE' );
+    _sets_match( \@expected, \@actual, 'JUST_A_FILE' );
 }
 
 NO_PARMS: {
@@ -53,7 +57,7 @@ NO_PARMS: {
     );
 
     @actual = grep { !/\.svn/ } @actual; # If I'm building this in my Subversion dir
-    is_deeply( [sort @expected], [sort @actual], 'NO_PARMS' );
+    _sets_match( \@expected, \@actual, 'NO_PARMS' );
 }
 
 MULTIPLE_STARTS: {
@@ -72,7 +76,7 @@ MULTIPLE_STARTS: {
     );
 
     @actual = grep { !/\.svn/ } @actual; # If I'm building this in my Subversion dir
-    is_deeply( [sort @expected], [sort @actual], 'MULTIPLE_STARTS' );
+    _sets_match( \@expected, \@actual, 'MULTIPLE_STARTS' );
 }
 
 NO_DESCEND: {
@@ -95,9 +99,35 @@ NO_DESCEND: {
         t/swamp/perl.pod
     );
 
-    is_deeply( [sort @expected], [sort @actual], 'NO_DESCEND' );
-    use Data::Dumper;
-    print Dumper( \@expected, \@actual );
+    _sets_match( \@expected, \@actual, 'NO_DESCEND' );
+}
+
+
+ONLY_FILES_WITH_AN_EXTENSION: {
+    my $file_filter = sub {
+        return /^[^.].*\./;
+    };
+
+    my $iter = File::Next::files( {file_filter => $file_filter}, 't/swamp' );
+    isa_ok( $iter, 'CODE' );
+
+
+    my @actual = slurp( $iter );
+
+    my @expected = qw(
+        t/swamp/Makefile.PL
+        t/swamp/c-header.h
+        t/swamp/c-source.c
+        t/swamp/javascript.js
+        t/swamp/parrot.pir
+        t/swamp/perl-test.t
+        t/swamp/perl.pl
+        t/swamp/perl.pm
+        t/swamp/perl.pod
+    );
+
+    @actual = grep { !/\.svn/ } @actual; # If I'm building this in my Subversion dir
+    _sets_match( \@expected, \@actual, 'ONLY_FILES_WITH_AN_EXTENSION' );
 }
 
 
@@ -109,4 +139,18 @@ sub slurp {
         push( @files, $file );
     }
     return @files;
+}
+
+sub _sets_match {
+    my @expected = @{+shift};
+    my @actual = @{+shift};
+    my $msg = shift;
+
+    # Normalize all the paths
+    for my $path ( @expected, @actual ) {
+        $path = reslash( $path );
+    }
+
+    local $Test::Builder::Level = $Test::Builder::Level + 1; ## no critic
+    return is_deeply( [sort @expected], [sort @actual], $msg );
 }
