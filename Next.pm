@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.28
+Version 0.30
 
 =cut
 
-our $VERSION = '0.28';
+our $VERSION = '0.30';
 
 =head1 SYNOPSIS
 
@@ -115,6 +115,17 @@ By default, the I<descend_filter> is C<sub {1}>, or "always descend".
 If I<error_handler> is set, then any errors will be sent through
 it.  By default, this value is C<CORE::die>.
 
+=head2 sort_files => [ 0 | 1 | \&sort_sub]
+
+If you want files sorted, pass in some true value, as in
+C<< sort_files => 1 >>.
+
+If you want a special sort order, pass in a sort function like
+C<< sort_files => sub { $a->[1] cmp $b->[1] } >>.
+Note that the parms passed in to the sub are arrayrefs, where $a->[0]
+is the directory name and $a->[1] is the file name.  Typically
+you're going to be sorting on $a->[1].
+
 =head1 FUNCTIONS
 
 =head2 files( { \%parameters }, @starting points )
@@ -125,14 +136,37 @@ in I<@starting_points>.
 All file-finding in this module is adapted from Mark Jason Dominus'
 marvelous I<Higher Order Perl>, page 126.
 
+=head2 sort_standard( $a, $b )
+
+A sort function for passing as a C<sort_files> parameter:
+
+    my $iter = File::Next::files( {
+        sort_files => \&File::Next::sort_reverse
+    }, 't/swamp' );
+
+This function is the default, so the code above is identical to:
+
+    my $iter = File::Next::files( {
+        sort_files => \&File::Next::sort_reverse
+    }, 't/swamp' );
+
+=head2 sort_reverse( $a, $b )
+
+Same as C<sort_standard>, but in reverse.
+
 =cut
 
 use File::Spec ();
+
+## no critic (ProhibitPackageVars)
+our $name; # name of the current file
+our $dir;  # dir of the current file
 
 my %files_defaults = (
     file_filter => sub{1},
     descend_filter => sub {1},
     error_handler => sub { CORE::die @_ },
+    sort_files => undef,
 );
 
 sub files {
@@ -172,7 +206,7 @@ sub files {
                     : $file;
 
             if (-d $fullpath) {
-                push( @queue, _candidate_files( $parms, $fullpath ) );
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
             elsif (-f $fullpath) {
                 local $_ = $file;
@@ -226,12 +260,10 @@ sub _candidate_files {
         return;
     }
 
-    %ups or %ups = map {($_,1)} File::Spec->no_upwards;
+    %ups or %ups = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
     my @newfiles;
-    my $up = File::Spec->updir;
-    my $cur = File::Spec->curdir;
     while ( my $file = readdir $dh ) {
-        next if ($file eq $up) || ($file eq $cur);
+        next if $ups{$file};
 
         local $File::Next::dir = File::Spec->catdir( $dir, $file );
         if ( -d $File::Next::dir ) {
@@ -240,9 +272,16 @@ sub _candidate_files {
         }
         push( @newfiles, [$dir, $file] );
     }
+    if ( my $sub = $parms->{sort_files} ) {
+        $sub = \&sort_standard unless ref($sub) eq 'CODE';
+        @newfiles = sort $sub @newfiles;
+    }
 
     return @newfiles;
 }
+
+sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
+sub sort_reverse($$)    { return $_[1]->[1] cmp $_[0]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
 
 =head1 AUTHOR
 
