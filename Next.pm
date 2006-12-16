@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.32
+Version 0.34
 
 =cut
 
-our $VERSION = '0.32';
+our $VERSION = '0.34';
 
 =head1 SYNOPSIS
 
@@ -163,14 +163,16 @@ our $name; # name of the current file
 our $dir;  # dir of the current file
 
 our %files_defaults;
+our %skip_dirs;
 
 BEGIN {
     %files_defaults = (
-        file_filter => sub{1},
-        descend_filter => sub {1},
+        file_filter => undef,
+        descend_filter => undef,
         error_handler => sub { CORE::die @_ },
         sort_files => undef,
     );
+    %skip_dirs = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
 }
 
 sub files {
@@ -189,7 +191,7 @@ sub files {
 
     my @queue;
     for ( @_ ) {
-        my $start = _reslash( $_ );
+        my $start = reslash( $_ );
         if (-d $start) {
             push @queue, [$start,undef];
         }
@@ -209,21 +211,17 @@ sub files {
                         : $dir
                     : $file;
 
-            if (-d $fullpath) {
-                unshift( @queue, _candidate_files( $parms, $fullpath ) );
-            }
-            elsif (-f $fullpath) {
-                local $_ = $file;
-                local $File::Next::dir = $dir;
-                local $File::Next::name = $fullpath;
-                if ( $parms->{file_filter}->() ) {
-                    if (wantarray) {
-                        return ($dir,$file);
-                    }
-                    else {
-                        return $fullpath;
-                    }
+            if (-f $fullpath) {
+                if ( $parms->{file_filter} ) {
+                    local $_ = $file;
+                    local $File::Next::dir = $dir;
+                    local $File::Next::name = $fullpath;
+                    next if not $parms->{file_filter}->();
                 }
+                return wantarray ? ($dir,$file) : $fullpath;
+            }
+            elsif (-d $fullpath) {
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
         } # while
 
@@ -231,7 +229,15 @@ sub files {
     }; # iterator
 }
 
-sub _reslash {
+=head2 reslash( $path )
+
+Takes a path with all forward slashes and rebuilds it with whatever
+is appropriate for the platform.  For example 'foo/bar/bat' will
+become 'foo\bar\bat' on Windows.
+
+=cut
+
+sub reslash {
     my $path = shift;
 
     my @parts = split( /\//, $path );
@@ -252,8 +258,6 @@ I<$parms> is the hashref of parms passed into File::Next constructor.
 
 =cut
 
-our %ups;
-
 sub _candidate_files {
     my $parms = shift;
     my $dir = shift;
@@ -264,15 +268,17 @@ sub _candidate_files {
         return;
     }
 
-    %ups or %ups = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
     my @newfiles;
     while ( my $file = readdir $dh ) {
-        next if $ups{$file};
+        next if $skip_dirs{$file};
 
-        local $File::Next::dir = File::Spec->catdir( $dir, $file );
-        if ( -d $File::Next::dir ) {
-            local $_ = $file;
-            next unless $parms->{descend_filter}->();
+        # Only do directory checking if we have a descend_filter
+        if ( $parms->{descend_filter} ) {
+            local $File::Next::dir = File::Spec->catdir( $dir, $file );
+            if ( -d $File::Next::dir ) {
+                local $_ = $file;
+                next if not $parms->{descend_filter}->();
+            }
         }
         push( @newfiles, [$dir, $file] );
     }

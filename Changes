@@ -1,5 +1,18 @@
 Revision history for File-Next
 
+0.34    Sat Dec 16 00:21:10 CST 2006
+
+    [ENHANCEMENTS]
+    The reslash() function is now publicly usable, although not via
+    export.  This is mostly convenience for ack.
+
+    Minor speedups when there's no file_filter parameter.
+
+    Speedups when there's no descend_filter, too.  We were doing
+    checks to see if a given file was a directory, even though we
+    didn't do anything with that fact if there's no descend_filter.
+
+
 0.32    Wed Dec  6 19:36:51 CST 2006
 
     No functionality changes, except as seen below.  For most of
