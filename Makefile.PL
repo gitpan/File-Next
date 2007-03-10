@@ -22,7 +22,11 @@ return <<'MAKE_FRAG';
 .PHONY: tags critic
 
 critic:
-	perlcritic -profile perlcriticrc -1 -quiet .
+	perlcritic -profile perlcriticrc -1 -quiet *.pm t/*.t
+
+prof: all
+	perl -d:DProf -Mblib ./stress ~/parrot ~/bw/trunk > /dev/null
+	dprofpp
 
 MAKE_FRAG
 }

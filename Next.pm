@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.38
+Version 0.40
 
 =cut
 
-our $VERSION = '0.38';
+our $VERSION = '0.40';
 
 =head1 SYNOPSIS
 
@@ -22,9 +22,9 @@ It's lightweight and has no non-core prerequisites.
 
     use File::Next;
 
-    my $files = File::Next->files( '/tmp' );
+    my $files = File::Next::files( '/tmp' );
 
-    while ( my $file = $files->() ) {
+    while ( defined ( my $file = $files->() ) ) {
         # do something...
     }
 
@@ -35,9 +35,9 @@ that will walk through a directory tree.  The simplest use case is:
 
     use File::Next;
 
-    my $iter = File::Next->files( '/tmp' );
+    my $iter = File::Next::files( '/tmp' );
 
-    while ( my $file = $iter->() ) {
+    while ( defined ( my $file = $iter->() ) ) {
         print $file, "\n";
     }
 
@@ -206,22 +206,24 @@ BEGIN {
     %skip_dirs = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
 }
 
+
 sub files {
     my ($parms,@queue) = _setup( \%files_defaults, @_ );
+    my $filter = $parms->{file_filter};
 
     return sub {
         while (@queue) {
             my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
             if (-f $fullpath) {
-                if ( $parms->{file_filter} ) {
+                if ( $filter ) {
                     local $_ = $file;
                     local $File::Next::dir = $dir;
                     local $File::Next::name = $fullpath;
-                    next if not $parms->{file_filter}->();
+                    next if not $filter->();
                 }
                 return wantarray ? ($dir,$file,$fullpath) : $fullpath;
             }
-            elsif (-d $fullpath) {
+            elsif (-d _) {
                 unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
         } # while
@@ -230,12 +232,13 @@ sub files {
     }; # iterator
 }
 
+
 sub dirs {
     my ($parms,@queue) = _setup( \%files_defaults, @_ );
 
     return sub {
         while (@queue) {
-            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
+            my (undef,undef,$fullpath) = splice( @queue, 0, 3 );
             if (-d $fullpath) {
                 unshift( @queue, _candidate_files( $parms, $fullpath ) );
                 return $fullpath;
@@ -286,7 +289,7 @@ sub _setup {
     my %passed_parms = %{$passed_parms};
 
     my $parms = {};
-    for my $key ( keys %$defaults ) {
+    for my $key ( keys %{$defaults} ) {
         $parms->{$key} =
             exists $passed_parms{$key}
                 ? delete $passed_parms{$key}
@@ -338,7 +341,7 @@ sub _candidate_files {
     }
 
     my @newfiles;
-    while ( my $file = readdir $dh ) {
+    while ( defined ( my $file = readdir $dh ) ) {
         next if $skip_dirs{$file};
 
         # Only do directory checking if we have a descend_filter
@@ -354,6 +357,8 @@ sub _candidate_files {
         }
         push( @newfiles, $dir, $file, $fullpath );
     }
+    closedir $dh;
+
     if ( my $sub = $parms->{sort_files} ) {
         my @triplets;
         while ( @newfiles ) {

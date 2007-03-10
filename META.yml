@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                File-Next
-version:             0.38
+version:             0.40
 abstract:            File-finding iterator
 license:             unknown
 generated_by:        ExtUtils::MakeMaker version 6.30_01
