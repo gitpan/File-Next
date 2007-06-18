@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 0.40
+Version 1.00
 
 =cut
 
-our $VERSION = '0.40';
+our $VERSION = '1.00';
 
 =head1 SYNOPSIS
 
@@ -56,26 +56,36 @@ I<$file> and I<$fullpath>, where I<$fullpath> is what would get
 returned in scalar context.
 
 The first parameter to any of the iterator factory functions may
-be a hashref of parameters.
+be a hashref of options.
 
-Note that the iterator will only return files, not directories.
+=head1 ITERATORS
 
-=head1 FUNCTIONS
+For the three iterators, the \%options are optional.
 
-=head2 files( { \%parameters }, @starting_points )
+=head2 files( [ \%options, ] @starting_points )
 
 Returns an iterator that walks directories starting with the items
-in I<@starting_points>.  Each call to the iterator returns another file.
+in I<@starting_points>.  Each call to the iterator returns another
+regular file.
 
-=head2 dirs( { \%parameters }, @starting_points )
+=head2 dirs( [ \%options, ] @starting_points )
 
 Returns an iterator that walks directories starting with the items
 in I<@starting_points>.  Each call to the iterator returns another
 directory.
 
+=head2 everything( [ \%options, ] @starting_points )
+
+Returns an iterator that walks directories starting with the items
+in I<@starting_points>.  Each call to the iterator returns another
+file, whether it's a regular file, directory, symlink, socket, or
+whatever.
+
+=head1 SUPPORT FUNCTIONS
+
 =head2 sort_standard( $a, $b )
 
-A sort function for passing as a C<sort_files> parameter:
+A sort function for passing as a C<sort_files> option:
 
     my $iter = File::Next::files( {
         sort_files => \&File::Next::sort_standard,
@@ -125,7 +135,7 @@ a collection of variables.
 
 These are analogous to the same variables in L<File::Find>.
 
-    my $iter = File::Find::files( { file_filter => sub { /\.txt$/ } }, '/tmp' );
+    my $iter = File::Next::files( { file_filter => sub { /\.txt$/ } }, '/tmp' );
 
 By default, the I<file_filter> is C<sub {1}>, or "all files".
 
@@ -249,6 +259,30 @@ sub dirs {
     }; # iterator
 }
 
+
+sub everything {
+    my ($parms,@queue) = _setup( \%files_defaults, @_ );
+    my $filter = $parms->{file_filter};
+
+    return sub {
+        while (@queue) {
+            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
+            if (-d $fullpath) {
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
+            }
+            if ( $filter ) {
+                local $_ = $file;
+                local $File::Next::dir = $dir;
+                local $File::Next::name = $fullpath;
+                next if not $filter->();
+            }
+            return wantarray ? ($dir,$file,$fullpath) : $fullpath;
+        } # while
+
+        return;
+    }; # iterator
+}
+
 sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
 sub sort_reverse($$)    { return $_[1]->[1] cmp $_[0]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
 
@@ -269,7 +303,7 @@ sub reslash {
 
 Handles all the scut-work for setting up the parms passed in.
 
-Returns a hashref of operational parameters, combined between
+Returns a hashref of operational options, combined between
 I<$passed_parms> and I<$defaults>, plus the queue.
 
 The queue prep stuff takes the strings in I<@starting_points> and
@@ -299,7 +333,7 @@ sub _setup {
     # Any leftover keys are bogus
     for my $badkey ( keys %passed_parms ) {
         my $sub = (caller(1))[3];
-        $parms->{error_handler}->( "Invalid parameter passed to $sub(): $badkey" );
+        $parms->{error_handler}->( "Invalid option passed to $sub(): $badkey" );
     }
 
     # If it's not a code ref, assume standard sort
