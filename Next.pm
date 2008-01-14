@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 1.00
+Version 1.02
 
 =cut
 
-our $VERSION = '1.00_01';
+our $VERSION = '1.02';
 
 =head1 SYNOPSIS
 
@@ -196,17 +196,11 @@ passed in to the constructor.
 
 =cut
 
-use File::Spec       ();
-use Archive::Extract ();
-use File::Temp       ();
-use ReleaseAction    ();
-use File::Path       ();
-use Carp::Clan;
-use Storable ();
+use File::Spec ();
 
 ## no critic (ProhibitPackageVars)
-our $name;    # name of the current file
-our $dir;     # dir of the current file
+our $name; # name of the current file
+our $dir;  # dir of the current file
 
 our %files_defaults;
 our %skip_dirs;
@@ -215,156 +209,82 @@ BEGIN {
     %files_defaults = (
         file_filter     => undef,
         descend_filter  => undef,
-        error_handler   => \&confess,
+        error_handler   => sub { CORE::die @_ },
         sort_files      => undef,
         follow_symlinks => 1,
     );
-    %skip_dirs = map { ( $_, 1 ) } ( File::Spec->curdir, File::Spec->updir );
+    %skip_dirs = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
 }
 
+
 sub files {
-    my ( $parms, @queue ) = _setup( \%files_defaults, @_ );
+    my ($parms,@queue) = _setup( \%files_defaults, @_ );
     my $filter = $parms->{file_filter};
 
     return sub {
         while (@queue) {
-            my ( $dir, $file, $fullpath, $outside ) = splice( @queue, 0, 4 );
-            if ( my $new_archive = _try_archive($fullpath) ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   archive  => $new_archive,
-                        parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!($outside),
-                    }
-                    );
-            }
-            elsif ( -f $fullpath ) {
-                if ($filter) {
-                    local $_                = $file;
-                    local $File::Next::dir  = $dir;
+            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
+            if ( -f $fullpath ) {
+                if ( $filter ) {
+                    local $_ = $file;
+                    local $File::Next::dir = $dir;
                     local $File::Next::name = $fullpath;
                     next if not $filter->();
                 }
-                if ( not wantarray ) {
-                    return $fullpath;
-                }
-                else {
-                    my $archive_path = _archive_path( $dir, $file, $outside );
-                    return ( $dir, $file, $fullpath, $archive_path );
-                }
+                return wantarray ? ($dir,$file,$fullpath) : $fullpath;
             }
             elsif ( -d _ ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!($outside),
-                    }
-                    );
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
-        }    # while
+        } # while
 
         return;
-    };    # iterator
+    }; # iterator
 }
 
+
 sub dirs {
-    my ( $parms, @queue ) = _setup( \%files_defaults, @_ );
+    my ($parms,@queue) = _setup( \%files_defaults, @_ );
 
     return sub {
         while (@queue) {
-            my ( undef, undef, $fullpath, $outside ) = splice( @queue, 0, 4 );
-            if ( my $new_archive = _try_archive($fullpath) ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   archive  => $new_archive,
-                        parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!($outside),
-                    }
-                    );
-                if ( not wantarray ) {
-                    return $fullpath;
-                }
-                else {
-                    my $archive_path
-                        = _archive_path( $fullpath, undef, $outside );
-                    return ( undef, undef, $fullpath, $archive_path );
-                }
+            my (undef,undef,$fullpath) = splice( @queue, 0, 3 );
+            if ( -d $fullpath ) {
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
+                return $fullpath;
             }
-            elsif ( -d $fullpath ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!$outside,
-                    }
-                    );
-                if ( not wantarray ) {
-                    return $fullpath;
-                }
-                else {
-                    my $archive_path
-                        = _archive_path( $fullpath, undef, $outside );
-                    return ( undef, undef, $fullpath, $archive_path );
-                }
-            }
-        }    # while
+        } # while
 
         return;
-    };    # iterator
+    }; # iterator
 }
 
+
 sub everything {
-    my ( $parms, @queue ) = _setup( \%files_defaults, @_ );
+    my ($parms,@queue) = _setup( \%files_defaults, @_ );
     my $filter = $parms->{file_filter};
 
     return sub {
         while (@queue) {
-            my ( $dir, $file, $fullpath, $outside ) = splice( @queue, 0, 4 );
-            if ( my $new_archive = _try_archive($fullpath) ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   archive  => $new_archive,
-                        parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!($outside)
-                    }
-                    );
+            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
+            if ( -d $fullpath ) {
+                unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
-            elsif ( -d $fullpath ) {
-                unshift @queue,
-                    _candidate_files(
-                    {   parms    => $parms,
-                        fullpath => $fullpath,
-                        ( outside => $outside ) x !!($outside),
-                    }
-                    );
-            }
-
-            if ($filter) {
-                local $_                = $file;
-                local $File::Next::dir  = $dir;
+            if ( $filter ) {
+                local $_ = $file;
+                local $File::Next::dir = $dir;
                 local $File::Next::name = $fullpath;
                 next if not $filter->();
             }
-            if ( not wantarray ) {
-                return $fullpath;
-            }
-            else {
-                $DB::single = 1 if $file =~ /ccc/;
-                my $archive_path = _archive_path( $dir, $file, $outside );
-                return ( $dir, $file, $fullpath, $archive_path );
-            }
-        }    # while
+            return wantarray ? ($dir,$file,$fullpath) : $fullpath;
+        } # while
 
         return;
-    };    # iterator
+    }; # iterator
 }
 
-sub sort_standard($$) { return $_[0]->[1] cmp $_[1]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
-sub sort_reverse($$) { return $_[1]->[1] cmp $_[0]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
+sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
+sub sort_reverse($$)    { return $_[1]->[1] cmp $_[0]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
 
 sub reslash {
     my $path = shift;
@@ -373,8 +293,9 @@ sub reslash {
 
     return $path if @parts < 2;
 
-    return File::Spec->catfile(@parts);
+    return File::Spec->catfile( @parts );
 }
+
 
 =head1 PRIVATE FUNCTIONS
 
@@ -397,234 +318,99 @@ a time (spliced, really).
 
 sub _setup {
     my $defaults = shift;
-    my $passed_parms
-        = ref $_[0] eq 'HASH' ? { %{ +shift } } : {};    # copy parm hash
+    my $passed_parms = ref $_[0] eq 'HASH' ? {%{+shift}} : {}; # copy parm hash
 
     my %passed_parms = %{$passed_parms};
 
     my $parms = {};
     for my $key ( keys %{$defaults} ) {
-        $parms->{$key}
-            = exists $passed_parms{$key}
-            ? delete $passed_parms{$key}
-            : $defaults->{$key};
+        $parms->{$key} =
+            exists $passed_parms{$key}
+                ? delete $passed_parms{$key}
+                : $defaults->{$key};
     }
 
     # Any leftover keys are bogus
     for my $badkey ( keys %passed_parms ) {
-        my $sub = ( caller(1) )[3];
-        $parms->{error_handler}->("Invalid option passed to $sub(): $badkey");
+        my $sub = (caller(1))[3];
+        $parms->{error_handler}->( "Invalid option passed to $sub(): $badkey" );
     }
 
     # If it's not a code ref, assume standard sort
-    if ( $parms->{sort_files} && ( ref( $parms->{sort_files} ) ne 'CODE' ) ) {
+    if ( $parms->{sort_files} && ( ref($parms->{sort_files}) ne 'CODE' ) ) {
         $parms->{sort_files} = \&sort_standard;
     }
     my @queue;
 
-    for (@_) {
-        my $start = reslash($_);
-        if ( -d $start ) {
-            push @queue, ( $start, undef, $start, undef );
+    for ( @_ ) {
+        my $start = reslash( $_ );
+        if (-d $start) {
+            push @queue, ($start,undef,$start);
         }
         else {
-            push @queue, ( undef, $start, $start, undef );
+            push @queue, (undef,$start,$start);
         }
     }
 
-    return ( $parms, @queue );
+    return ($parms,@queue);
 }
 
-=head2 _candidate_files( { fullpath => ..., parms => ..., [ archive => ... ], [ outside => ... ] } )
+=head2 _candidate_files( $parms, $dir )
 
-Pulls out the files/dirs that might be worth looking into in I<fullpath>.
-If I<fullpath> is the empty string, then search the current directory.
+Pulls out the files/dirs that might be worth looking into in I<$dir>.
+If I<$dir> is the empty string, then search the current directory.
 
-I<parms> is the hashref of parms passed into File::Next constructor.
-
-I<archive> is an optional Archive::Extract object. If it is present,
-it will be extracted to a temporary directory. Searching for files
-resumes inside the temporary directory.
-
-I<outside> is an optional parameter, used for garbage collection of
-extracted on-disk archive contents, and when constructing a "logical"
-filepath for files inside archives.
+I<$parms> is the hashref of parms passed into File::Next constructor.
 
 =cut
 
 sub _candidate_files {
-    my ($p) = @_;
+    my $parms = shift;
+    my $dir = shift;
 
-    # Unpack the archive and retry from inside the archive.
-    if ( exists $p->{archive} ) {
-        return _candidate_files_from_archive($p);
-    }
-    else {
-        return _candidate_files_from_directory($p);
-    }
-}
-
-=head2 _candidate_files_from_archive( { fullpath => ..., parms => ..., archive => ..., [ outside => ... ] } )
-
-Is used by I<_candidate_files>. See I<_candidate_files> for
-information on the other parameters.
-
-I<archive> is a mandatory Archive::Extract object.
-
-=cut
-
-sub _candidate_files_from_archive {
-
-    # Make a copy of input but not the two objects.
-    my ($p) = @_;
-
-    # The real path is now inside this temp directory but preserve the
-    # original path for later reconstruction. Also save the tmp root
-    # so it can be removed from the fake path.
-    my $tmpdir    = File::Temp::tempdir( CLEANUP => 1 );
-    my $tmpdir_rx = qr/\A\Q$tmpdir\E/;
-    my $cleanup   = ReleaseAction->new(
-        sub {
-
-            # print "DELETING $tmpdir\n";
-            File::Path::rmtree($tmpdir);
-        }
-    );
-    my %new_p = (
-
-        # outside contains the archive path
-        outside   => $p,
-        tmpdir_rx => $tmpdir_rx,
-        cleanup   => $cleanup,
-
-        # The fake, on-disk path. Don
-        fullpath => $tmpdir,
-        parms    => $p->{parms},
-    );
-
-    # Woo! Extract the archive to disk and now just treat it like a
-    # directory.
-    # print "EXTRACTING $new_p{outside}{fullpath} to $tmpdir\n";
-    $p->{archive}->extract( to => $tmpdir );
-
-    # recurse.
-    return _candidate_files_from_directory( \%new_p );
-}
-
-=head2 _candidate_files_from_directory( { fullpath => ..., parms => ..., [ outside => ... ] } )
-
-Is used by I<_candidate_files>. See I<_candidate_files> for
-information on the other parameters.
-
-The I<archive> parameter must not be present.
-
-=cut
-
-sub _candidate_files_from_directory {
-    my ($p) = @_;
-
-    # Search this directory.
     my $dh;
-    if ( !opendir $dh, $p->{fullpath} ) {
-        $p->{parms}{error_handler}->("$p->{fullpath}: $!");
+    if ( !opendir $dh, $dir ) {
+        $parms->{error_handler}->( "$dir: $!" );
         return;
     }
 
     my @newfiles;
-    while ( defined( my $file = readdir $dh ) ) {
+    my $descend_filter = $parms->{descend_filter};
+    my $follow_symlinks = $parms->{follow_symlinks};
+    my $sort_sub = $parms->{sort_files};
+
+    while ( defined ( my $file = readdir $dh ) ) {
         next if $skip_dirs{$file};
+        my $has_stat;
 
         # Only do directory checking if we have a descend_filter
-        my $fullpath = File::Spec->catdir( $p->{fullpath}, $file );
-        if ( !$p->{parms}{follow_symlinks} ) {
+        my $fullpath = File::Spec->catdir( $dir, $file );
+        if ( !$follow_symlinks ) {
             next if -l $fullpath;
+            $has_stat = 1;
         }
 
-        if ( $p->{parms}{descend_filter} && -d $fullpath ) {
-            local $File::Next::dir = $fullpath;
-            local $_               = $file;
-
-            # JBJ: exception handling???
-            next if not $p->{parms}{descend_filter}->();
+        if ( $descend_filter ) {
+            if ( $has_stat ? (-d _) : (-d $fullpath) ) {
+                local $File::Next::dir = $fullpath;
+                local $_ = $file;
+                next if not $descend_filter->();
+            }
         }
-        push @newfiles, $p->{fullpath}, $file, $fullpath, $p;
+        if ( $sort_sub ) {
+            push( @newfiles, [ $dir, $file, $fullpath ] );
+        }
+        else {
+            push( @newfiles, $dir, $file, $fullpath );
+        }
     }
     closedir $dh;
 
-    # Assert!
-    @newfiles % 4 == 0
-        or die;
-
-    if ( my $sub = $p->{parms}{sort_files} ) {
-        my @quads;
-        while (@newfiles) {
-            push @quads, [ splice( @newfiles, 0, 4 ) ];
-        }
-        @newfiles = map { @{$_} } sort $sub @quads;
+    if ( $sort_sub ) {
+        return map { @{$_} } sort $sort_sub @newfiles;
     }
-
-    # Assert!
-    @newfiles % 4 == 0
-        or die;
 
     return @newfiles;
-}
-
-=head2 _try_archive( $file )
-
-Attempts to read I<$file> as an archive. Returns undef if it is not an
-archive.
-
-=cut
-
-sub _NOTHING { }
-
-sub _try_archive {
-    my ($fullpath) = @_;
-    local $@;
-    local $Archive::Extract::WARN = 0;
-    local $SIG{__WARN__}          = \&_NOTHING;
-    local $SIG{__DIE__}           = \&_NOTHING;
-
-    # print "TRYING $fullpath\n";
-    my $archive = scalar
-        eval { return Archive::Extract->new( archive => $fullpath ); };
-    if ( defined $archive ) {
-
-        # print "ARCHIVE: $fullpath\n";
-    }
-    return $archive;
-}
-
-=head2 _archive_path( $dir, $file, $archive )
-
-Given a I<$dir>, I<$file>, and an optional originating I<$archive>,
-return a meaningful file path. These paths are not necessarilly "real"
-and cannot always be found directly on disk. They are "logical" in the
-sense that things contained within archive files are treated as if the
-archive were a directory. It makes for something readable to people or
-software that expects it.
-
-=cut
-
-sub _archive_path {
-    my ( $dir, $file, $archive ) = @_;
-    if ( defined $archive ) {
-        if ( defined $archive->{tmpdir_rx} ) {
-            $dir =~ s/$archive->{tmpdir_rx}/$archive->{outside}{fullpath}/
-                or warn;
-        }
-        return _archive_path( $dir, $file, $archive->{outside} );
-    }
-    elsif ( defined $dir and defined $file ) {
-        return File::Spec->catfile( $dir, $file );
-    }
-    elsif ( defined $dir ) {
-        return $dir;
-    }
-    else {
-        return $file;
-    }
 }
 
 =head1 AUTHOR
@@ -634,10 +420,8 @@ Andy Lester, C<< <andy at petdance.com> >>
 =head1 BUGS
 
 Please report any bugs or feature requests to
-C<bug-file-next at rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=File-Next>.
-I will be notified, and then you'll automatically be notified of
-progress on your bug as I make changes.
+L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=File-Next>.  Note that
+File::Next does NOT use L<rt.cpan.org> for bug tracking.
 
 =head1 SUPPORT
 
@@ -649,6 +433,10 @@ You can also look for information at:
 
 =over 4
 
+=item * File::Next's bug queue
+
+L<http://code.google.com/p/file-next/issues/list>
+
 =item * AnnoCPAN: Annotated CPAN documentation
 
 L<http://annocpan.org/dist/File-Next>
@@ -656,10 +444,6 @@ L<http://annocpan.org/dist/File-Next>
 =item * CPAN Ratings
 
 L<http://cpanratings.perl.org/d/File-Next>
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=File-Next>
 
 =item * Search CPAN
 
@@ -678,11 +462,11 @@ marvelous I<Higher Order Perl>, page 126.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2006-2007 Andy Lester, all rights reserved.
+Copyright 2006-2008 Andy Lester, all rights reserved.
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
 
 =cut
 
-1;    # End of File::Next
+1; # End of File::Next
