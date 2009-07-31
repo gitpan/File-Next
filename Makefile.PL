@@ -1,4 +1,7 @@
 package main;
+
+use 5.006001;
+
 use strict;
 use warnings;
 use ExtUtils::MakeMaker;
@@ -17,14 +20,19 @@ my %parms = (
     clean               => { FILES => 'File-Next-*' },
 );
 
-if ( $ExtUtils::MakeMaker::VERSION ge '6.36' ) {
-    $parms{EXTRA_META} = <<EOF;
-resources:
-    bugtracker: http://code.google.com/p/file-next/issues/list
-    license: http://dev.perl.org/licenses/
-    Repository: http://code.google.com/p/file-next/source
-EOF
-    }
+if ( $ExtUtils::MakeMaker::VERSION =~ /^\d\.\d\d$/ and $ExtUtils::MakeMaker::VERSION > 6.30 ) {
+    $parms{LICENSE} = 'perl';
+}
+
+if ( $ExtUtils::MakeMaker::VERSION ge '6.46' ) {
+    $parms{META_MERGE} = {
+        resources => {
+            bugtracker  => 'http://github.com/petdance/file-next/issues',
+            repository  => 'http://github.com/petdance/file-next/tree/master',
+            license     => 'http://dev.perl.org/licenses/',
+        }
+    };
+}
 
 WriteMakefile( %parms );
 
@@ -32,16 +40,26 @@ sub MY::postamble {
 return <<'MAKE_FRAG';
 .PHONY: tags critic
 
+tags:
+	ctags -f tags --recurse --totals \
+		--exclude=blib \
+		--exclude=.git \
+		--exclude=.svn \
+		--exclude='*~' \
+		--languages=Perl --langmap=Perl:+.t \
+
 critic:
 	perlcritic -profile perlcriticrc -1 -quiet *.pm t/*.t
 
+TARGET_DIRS=~/parrot /usr/local/minicpan ~/bin
+
 prof: all
-	perl -d:DProf -Mblib ./stress ~/parrot ~/bw/trunk ~/p101 ~/bin /Developer > /dev/null
+	perl -d:DProf -Mblib ./stress  $(TARGET_DIRS)
 	dprofpp -R
 
-smallprof: all
-	perl -d:SmallProf -Mblib ./stress ~/parrot ~/bw/trunk ~/p101 ~/bin /Developer > /dev/null
-	sort -k 2nr,2 smallprof.out | less
+nytprof: all
+	perl -d:NYTProf -Mblib ./stress $(TARGET_DIRS)
+	nytprofhtml
 
 MAKE_FRAG
 }
