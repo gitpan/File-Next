@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 1.04
+Version 1.06
 
 =cut
 
-our $VERSION = '1.04';
+our $VERSION = '1.06';
 
 =head1 SYNOPSIS
 
@@ -294,8 +294,8 @@ sub everything {
     }; # iterator
 }
 
-sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
-sub sort_reverse($$)    { return $_[1]->[1] cmp $_[0]->[1] }; ## no critic (ProhibitSubroutinePrototypes)
+sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] } ## no critic (ProhibitSubroutinePrototypes)
+sub sort_reverse($$)    { return $_[1]->[1] cmp $_[0]->[1] } ## no critic (ProhibitSubroutinePrototypes)
 
 sub reslash {
     my $path = shift;
@@ -496,5 +496,6 @@ version, or
 
 =back
 
+=cut
 
 1; # End of File::Next

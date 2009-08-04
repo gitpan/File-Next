@@ -54,11 +54,11 @@ critic:
 TARGET_DIRS=~/parrot /usr/local/minicpan ~/bin
 
 prof: all
-	perl -d:DProf -Mblib ./stress  $(TARGET_DIRS)
+	perl -d:DProf -Mblib ./stress $(TARGET_DIRS) > /dev/null
 	dprofpp -R
 
 nytprof: all
-	perl -d:NYTProf -Mblib ./stress $(TARGET_DIRS)
+	perl -d:NYTProf -Mblib ./stress $(TARGET_DIRS) > /dev/null
 	nytprofhtml
 
 MAKE_FRAG

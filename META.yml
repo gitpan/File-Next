@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               File-Next
-version:            1.04
+version:            1.06
 abstract:           File-finding iterator
 author:
     - Andy Lester <andy@petdance.com>
