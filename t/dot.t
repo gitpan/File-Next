@@ -2,14 +2,12 @@
 
 use strict;
 use warnings;
-use Test::More tests => 3;
+use Test::More tests => 2;
 
 use lib 't';
 use Util;
 
-BEGIN {
-    use_ok( 'File::Next' );
-}
+use File::Next;
 
 NO_PARMS: {
     chdir( 't' );
@@ -25,12 +23,19 @@ NO_PARMS: {
         dirs.t
         dot.t
         everything.t
+        filelist.txt
+        filelist-nul.txt
         follow.t
+        from_file.t
+        from_stdin.t
+        give-me-a-process-pipe.pl
         methods.t
         parms.t
         pod-coverage.t
         pod.t
+        process-substitution.t
         sort.t
+        stdin-iterator.pl
         Util.pm
         zero.t
         swamp/a/a1

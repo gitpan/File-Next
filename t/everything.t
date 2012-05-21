@@ -2,14 +2,13 @@
 
 use strict;
 use warnings;
-use Test::More tests => 5;
+
+use Test::More tests => 4;
 
 use lib 't';
 use Util;
 
-BEGIN {
-    use_ok( 'File::Next' );
-}
+use File::Next;
 
 NO_PARMS: {
     my $iter = File::Next::everything( 't/' );
@@ -25,12 +24,19 @@ NO_PARMS: {
         t/dirs.t
         t/dot.t
         t/everything.t
+        t/filelist.txt
+        t/filelist-nul.txt
         t/follow.t
+        t/from_file.t
+        t/from_stdin.t
+        t/give-me-a-process-pipe.pl
         t/methods.t
         t/parms.t
         t/pod-coverage.t
         t/pod.t
+        t/process-substitution.t
         t/sort.t
+        t/stdin-iterator.pl
         t/swamp
         t/swamp/0
         t/swamp/a

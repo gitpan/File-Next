@@ -1,7 +1,8 @@
+README.md
+
 Changes
 MANIFEST
 Makefile.PL
-README
 Next.pm
 perlcriticrc
 
@@ -11,12 +12,19 @@ t/basic.t
 t/dirs.t
 t/dot.t
 t/everything.t
+t/filelist.txt
+t/filelist-nul.txt
 t/follow.t
+t/from_file.t
+t/from_stdin.t
+t/give-me-a-process-pipe.pl
 t/methods.t
 t/parms.t
 t/pod-coverage.t
 t/pod.t
+t/process-substitution.t
 t/sort.t
+t/stdin-iterator.pl
 t/zero.t
 t/Util.pm
 
@@ -38,4 +46,5 @@ t/swamp/b/b1
 t/swamp/b/b2
 t/swamp/c/c1
 t/swamp/c/c2
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

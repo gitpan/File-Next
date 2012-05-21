@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 1.06
+Version 1.08
 
 =cut
 
-our $VERSION = '1.06';
+our $VERSION = '1.08';
 
 =head1 SYNOPSIS
 
@@ -80,6 +80,26 @@ Returns an iterator that walks directories starting with the items
 in I<@starting_points>.  Each call to the iterator returns another
 file, whether it's a regular file, directory, symlink, socket, or
 whatever.
+
+=head2 from_file( [ \%options, ] $filename )
+
+Returns an iterator that iterates over each of the files specified
+in I<$filename>.  If I<$filename> is C<->, then the files are read
+from STDIN.
+
+The files are assumed to be in the file one filename per line.  If
+I<$null_separated> is passed, then the files are assumed to be
+NUL-separated, as by C<find -print0>.
+
+If there are blank lines or null filenames in the input stream,
+they are ignored.
+
+Each filename is checked to see that it is a regular file or a named
+pipe.  If the file does not exists or is a directory, then it is
+skipped.
+
+The following options have no effect in C<from_files>: I<descend_filter>,
+I<sort_files>, I<follow_symlinks>.
 
 =head1 SUPPORT FUNCTIONS
 
@@ -172,7 +192,8 @@ By default, the I<descend_filter> is C<sub {1}>, or "always descend".
 =head2 error_handler => \&error_handler
 
 If I<error_handler> is set, then any errors will be sent through
-it.  By default, this value is C<CORE::die>.
+it.  By default, this value is C<CORE::die>.  This function must
+not return.
 
 =head2 sort_files => [ 0 | 1 | \&sort_sub]
 
@@ -199,11 +220,16 @@ need that behavior.  Setting C<< follow_symlinks => 0 >> can be a
 speed hit, because File::Next must check to see if the file or
 directory you're about to follow is actually a symlink.
 
+=head2 nul_separated => [ 0 | 1 ]
+
+Used on by the C<from_file> iterator.  Specifies that the files
+listed in the input file are separated by NUL characters, as from
+the C<find> command with the C<-print0> argument.
+
 =cut
 
 use File::Spec ();
 
-## no critic (ProhibitPackageVars)
 our $name; # name of the current file
 our $dir;  # dir of the current file
 
@@ -217,28 +243,29 @@ BEGIN {
         error_handler   => sub { CORE::die @_ },
         sort_files      => undef,
         follow_symlinks => 1,
+        nul_separated   => 0,
     );
     %skip_dirs = map {($_,1)} (File::Spec->curdir, File::Spec->updir);
 }
 
 
 sub files {
-    ($_[0] eq __PACKAGE__) && die 'File::Next::files must not be invoked as File::Next->files';
+    die _bad_invocation() if $_[0] eq __PACKAGE__;
 
     my ($parms,@queue) = _setup( \%files_defaults, @_ );
     my $filter = $parms->{file_filter};
 
     return sub {
         while (@queue) {
-            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
-            if ( -f $fullpath ) {
+            my ($dirname,$file,$fullpath) = splice( @queue, 0, 3 ); ## no critic (ProhibitMagicNumbers)
+            if ( -f $fullpath || -p $fullpath ) {
                 if ( $filter ) {
                     local $_ = $file;
-                    local $File::Next::dir = $dir;
+                    local $File::Next::dir = $dirname;
                     local $File::Next::name = $fullpath;
                     next if not $filter->();
                 }
-                return wantarray ? ($dir,$file,$fullpath) : $fullpath;
+                return wantarray ? ($dirname,$file,$fullpath) : $fullpath;
             }
             elsif ( -d _ ) {
                 unshift( @queue, _candidate_files( $parms, $fullpath ) );
@@ -251,13 +278,13 @@ sub files {
 
 
 sub dirs {
-    ($_[0] eq __PACKAGE__) && die 'File::Next::dirs must not be invoked as File::Next->dirs';
+    die _bad_invocation() if $_[0] eq __PACKAGE__;
 
     my ($parms,@queue) = _setup( \%files_defaults, @_ );
 
     return sub {
         while (@queue) {
-            my (undef,undef,$fullpath) = splice( @queue, 0, 3 );
+            my (undef,undef,$fullpath) = splice( @queue, 0, 3 ); ## no critic (ProhibitMagicNumbers)
             if ( -d $fullpath ) {
                 unshift( @queue, _candidate_files( $parms, $fullpath ) );
                 return $fullpath;
@@ -268,30 +295,82 @@ sub dirs {
     }; # iterator
 }
 
-
 sub everything {
-    ($_[0] eq __PACKAGE__) && die 'File::Next::everything must not be invoked as File::Next->everything';
+    die _bad_invocation() if $_[0] eq __PACKAGE__;
 
     my ($parms,@queue) = _setup( \%files_defaults, @_ );
     my $filter = $parms->{file_filter};
 
     return sub {
         while (@queue) {
-            my ($dir,$file,$fullpath) = splice( @queue, 0, 3 );
+            my ($dirname,$file,$fullpath) = splice( @queue, 0, 3 ); ## no critic (ProhibitMagicNumbers)
             if ( -d $fullpath ) {
                 unshift( @queue, _candidate_files( $parms, $fullpath ) );
             }
             if ( $filter ) {
                 local $_ = $file;
-                local $File::Next::dir = $dir;
+                local $File::Next::dir  = $dirname;
                 local $File::Next::name = $fullpath;
                 next if not $filter->();
             }
-            return wantarray ? ($dir,$file,$fullpath) : $fullpath;
+            return wantarray ? ($dirname,$file,$fullpath) : $fullpath;
         } # while
 
         return;
     }; # iterator
+}
+
+sub from_file {
+    die _bad_invocation() if $_[0] eq __PACKAGE__;
+
+    my ($parms,@queue) = _setup( \%files_defaults, @_ );
+    my $err = $parms->{error_handler};
+
+    my $filename = $queue[1];
+
+    if ( !$filename ) {
+        $err->( 'Must pass a filename to from_file()' );
+    }
+
+    my $fh;
+    if ( $filename eq '-' ) {
+        $fh = \*STDIN;
+    }
+    else {
+        open( $fh, '<', $filename );
+        if ( !$fh ) {
+            $err->( "Unable to open $filename: $!" );
+        }
+    }
+    my $filter = $parms->{file_filter};
+
+    return sub {
+        local $/ = $parms->{nul_separated} ? "\x00" : $/;
+        while ( my $fullpath = <$fh> ) {
+            chomp $fullpath;
+            next unless $fullpath =~ /./;
+            next unless -f $fullpath || -p _;
+
+            my ($volume,$dirname,$file) = File::Spec->splitpath( $fullpath );
+            if ( $filter ) {
+                local $_ = $file;
+                local $File::Next::dir  = $dirname;
+                local $File::Next::name = $fullpath;
+                next if not $filter->();
+            }
+            return wantarray ? ($dirname,$file,$fullpath) : $fullpath;
+        } # while
+        close $fh;
+
+        return;
+    }; # iterator
+}
+
+sub _bad_invocation {
+    my $good = (caller(1))[3];
+    my $bad  = $good;
+    $bad =~ s/(.+)::/$1->/;
+    return "$good must not be invoked as $bad";
 }
 
 sub sort_standard($$)   { return $_[0]->[1] cmp $_[1]->[1] } ## no critic (ProhibitSubroutinePrototypes)
@@ -343,7 +422,7 @@ sub _setup {
 
     # Any leftover keys are bogus
     for my $badkey ( keys %passed_parms ) {
-        my $sub = (caller(1))[3];
+        my $sub = (caller(1))[3]; ## no critic (ProhibitMagicNumbers)
         $parms->{error_handler}->( "Invalid option passed to $sub(): $badkey" );
     }
 
@@ -376,12 +455,12 @@ I<$parms> is the hashref of parms passed into File::Next constructor.
 =cut
 
 sub _candidate_files {
-    my $parms = shift;
-    my $dir = shift;
+    my $parms   = shift;
+    my $dirname = shift;
 
     my $dh;
-    if ( !opendir $dh, $dir ) {
-        $parms->{error_handler}->( "$dir: $!" );
+    if ( !opendir $dh, $dirname ) {
+        $parms->{error_handler}->( "$dirname: $!" );
         return;
     }
 
@@ -394,7 +473,7 @@ sub _candidate_files {
         my $has_stat;
 
         # Only do directory checking if we have a descend_filter
-        my $fullpath = File::Spec->catdir( $dir, $file );
+        my $fullpath = File::Spec->catdir( $dirname, $file );
         if ( !$follow_symlinks ) {
             next if -l $fullpath;
             $has_stat = 1;
@@ -408,10 +487,10 @@ sub _candidate_files {
             }
         }
         if ( $sort_sub ) {
-            push( @newfiles, [ $dir, $file, $fullpath ] );
+            push( @newfiles, [ $dirname, $file, $fullpath ] );
         }
         else {
-            push( @newfiles, $dir, $file, $fullpath );
+            push( @newfiles, $dirname, $file, $fullpath );
         }
     }
     closedir $dh;
@@ -422,6 +501,29 @@ sub _candidate_files {
 
     return @newfiles;
 }
+
+=head1 DIAGNOSTICS
+
+=over
+
+=item C<< File::Next::files must not be invoked as File::Next->files >>
+
+=item C<< File::Next::dirs must not be invoked as File::Next->dirs >>
+
+=item C<< File::Next::everything must not be invoked as File::Next->everything >>
+
+=back
+
+The interface functions do not allow for the method invocation syntax and
+throw errors with the messages above. You can work around this limitation
+with L<UNIVERSAL/can>.
+
+    for my $file_system_feature (qw(dirs files)) {
+        my $iterator = File::Next->can($file_system_feature)->($options, $target_directory);
+        while (defined(my $name = $iterator->())) {
+            # ...
+        }
+    }
 
 =head1 SPEED TWEAKS
 
@@ -481,20 +583,10 @@ marvelous I<Higher Order Perl>, page 126.
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2005-2009 Andy Lester.
+Copyright 2005-2012 Andy Lester.
 
 This program is free software; you can redistribute it and/or modify
-it under the terms of either:
-
-=over 4
-
-=item * the GNU General Public License as published by the Free
-Software Foundation; either version 1, or (at your option) any later
-version, or
-
-=item * the Artistic License version 2.0.
-
-=back
+it under the terms of the Artistic License version 2.0.
 
 =cut
 
