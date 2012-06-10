@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 1.08
+Version 1.09_01
 
 =cut
 
-our $VERSION = '1.08';
+our $VERSION = '1.09_01';
 
 =head1 SYNOPSIS
 
@@ -88,10 +88,10 @@ in I<$filename>.  If I<$filename> is C<->, then the files are read
 from STDIN.
 
 The files are assumed to be in the file one filename per line.  If
-I<$null_separated> is passed, then the files are assumed to be
+I<$nul_separated> is passed, then the files are assumed to be
 NUL-separated, as by C<find -print0>.
 
-If there are blank lines or null filenames in the input stream,
+If there are blank lines or empty filenames in the input stream,
 they are ignored.
 
 Each filename is checked to see that it is a regular file or a named
@@ -580,6 +580,12 @@ L<http://github.com/petdance/file-next/tree/master>
 
 All file-finding in this module is adapted from Mark Jason Dominus'
 marvelous I<Higher Order Perl>, page 126.
+
+Thanks also for bug fixes and typo finding to
+Bruce Woodward,
+Christopher J. Madsen,
+Bernhard Fisseni
+and Rob Hoelz.
 
 =head1 COPYRIGHT & LICENSE
 
