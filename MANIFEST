@@ -46,4 +46,5 @@ t/swamp/b/b1
 t/swamp/b/b2
 t/swamp/c/c1
 t/swamp/c/c2
-META.yml                                 Module meta-data (added by MakeMaker)
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)
