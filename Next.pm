@@ -9,11 +9,11 @@ File::Next - File-finding iterator
 
 =head1 VERSION
 
-Version 1.10
+Version 1.12
 
 =cut
 
-our $VERSION = '1.10';
+our $VERSION = '1.12';
 
 =head1 SYNOPSIS
 
@@ -265,7 +265,7 @@ sub files {
     return sub {
         while (@queue) {
             my ($dirname,$file,$fullpath) = splice( @queue, 0, 3 ); ## no critic (ProhibitMagicNumbers)
-            if ( -f $fullpath || -p $fullpath ) {
+            if ( -f $fullpath || -p $fullpath || $fullpath =~ m{^/dev/fd} ) {
                 if ( $filter ) {
                     local $_ = $file;
                     local $File::Next::dir = $dirname;
